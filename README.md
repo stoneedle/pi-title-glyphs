@@ -5,9 +5,9 @@ Live session status in your terminal/tab title. Scan a row of pi tabs and see at
 resting**, and **what it's doing** — without clicking into any of them.
 
 ```
-🔸 ⏳ · Rebuilding the search index                 working — most recent tool intent
-🦙 ❗ NEEDS YOU · confirm: Run rm -rf build?         blocked on you (urgent)
-♊ ✓ · Add a retry budget to the fetch helper        resting — finished, idle
+🔸 ⏳ myproj · Rebuilding the search index          working — most recent tool intent
+🦙 ❗ NEEDS YOU myproj · confirm: Run rm -rf build? blocked on you (urgent)
+♊ ✓ myproj · Add a retry budget to the fetch helper resting — finished, idle
 ```
 
 ![The headers, in the wild](https://raw.githubusercontent.com/t0mj/pi-title-glyphs/main/img/headers.png)
@@ -41,6 +41,13 @@ or any extension using that convention. Without it, there is a deterministic per
 fallback: the bash command, the read/write/edit path, the search query, the subagent name,
 then the first substantial string argument.
 
+**Project name** (the cwd's last path component) sits after the state glyph by default —
+it is what tells a row of tabs apart. `PI_TITLE_GLYPHS_CWD=0` hides it.
+
+Pi core writes its own `Pi - <session> - <cwd>` title at session start, on `/reload`,
+and when a session is named. This extension re-asserts its title a moment after each of
+those, so the glyph title is what you see.
+
 ## Provider glyphs
 
 Built-in, for providers with an unambiguous mnemonic:
@@ -68,7 +75,7 @@ All optional, all environment variables.
 | Variable | Default | Effect |
 |---|---|---|
 | `PI_TITLE_GLYPHS_EMOJI_<PROVIDER>` | built-in map, else `🤖` | glyph for one provider. Uppercase the provider id and replace non-alphanumerics with `_` |
-| `PI_TITLE_GLYPHS_CWD` | off | `1`/`on`/`true` adds the project directory name to the title |
+| `PI_TITLE_GLYPHS_CWD` | on | project directory name in the title; `0`/`off`/`no`/`false` hides it |
 | `PI_TITLE_GLYPHS_STATUS_FILE` | `<agent-dir>/extension-data/pi-title-glyphs/status-<pid>.json` | where the external status badge is read from (per session by default) |
 
 ## External status badge — the extension point

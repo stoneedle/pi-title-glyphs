@@ -33,14 +33,16 @@ test("emojiFor: known provider, unknown fallback, env override", () => {
   }
 });
 
-test("showCwd is opt-in", () => {
-  for (const v of ["", "0", "no", "off"]) {
-    process.env.PI_TITLE_GLYPHS_CWD = v;
-    assert.equal(showCwd(), false, `"${v}" must not enable cwd`);
-  }
+test("showCwd is on by default and can be switched off", () => {
+  delete process.env.PI_TITLE_GLYPHS_CWD;
+  assert.equal(showCwd(), true, "unset means shown");
   for (const v of ["1", "on", "true", "TRUE"]) {
     process.env.PI_TITLE_GLYPHS_CWD = v;
-    assert.equal(showCwd(), true, `"${v}" must enable cwd`);
+    assert.equal(showCwd(), true, `"${v}" keeps cwd shown (legacy opt-in values)`);
+  }
+  for (const v of ["0", "no", "off", "false", "FALSE"]) {
+    process.env.PI_TITLE_GLYPHS_CWD = v;
+    assert.equal(showCwd(), false, `"${v}" must hide cwd`);
   }
   delete process.env.PI_TITLE_GLYPHS_CWD;
 });
@@ -132,15 +134,21 @@ test("renderTitle: long content is ellipsized, never unbounded", () => {
   assert.ok(b.length <= 80, `badge line stayed bounded (${b.length} chars)`);
 });
 
-test("renderTitle: cwd is opt-in and appears in every layout", () => {
-  process.env.PI_TITLE_GLYPHS_CWD = "1";
+test("renderTitle: cwd is on by default, after the state glyph, in every layout", () => {
+  delete process.env.PI_TITLE_GLYPHS_CWD;
+  assert.equal(renderTitle({ state: "resting", provider: "ollama", cwdName: "myproj" }), "🦙 ✓ myproj");
+  assert.equal(renderTitle({ state: "working", provider: "ollama", cwdName: "myproj", toolLine: "go" }), "🦙 ⏳ myproj · go");
+  assert.equal(
+    renderTitle({ state: "needs-you", provider: "ollama", cwdName: "myproj", waitInfo: { title: "ok?" } }),
+    "🦙 ❗ NEEDS YOU myproj · ok?",
+  );
+});
+
+test("renderTitle: PI_TITLE_GLYPHS_CWD=0 hides the cwd name", () => {
+  process.env.PI_TITLE_GLYPHS_CWD = "0";
   try {
-    assert.equal(renderTitle({ state: "resting", provider: "ollama", cwdName: "myproj" }), "🦙 ✓ myproj");
-    assert.equal(renderTitle({ state: "working", provider: "ollama", cwdName: "myproj", toolLine: "go" }), "🦙 ⏳ myproj · go");
-    assert.equal(
-      renderTitle({ state: "needs-you", provider: "ollama", cwdName: "myproj", waitInfo: { title: "ok?" } }),
-      "🦙 ❗ NEEDS YOU myproj · ok?",
-    );
+    assert.equal(renderTitle({ state: "resting", provider: "ollama", cwdName: "myproj" }), "🦙 ✓");
+    assert.equal(renderTitle({ state: "working", provider: "ollama", cwdName: "myproj", toolLine: "go" }), "🦙 ⏳ · go");
   } finally {
     delete process.env.PI_TITLE_GLYPHS_CWD;
   }

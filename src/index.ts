@@ -23,7 +23,8 @@
  *   PI_TITLE_GLYPHS_EMOJI_<PROVIDER>=🦌  override a provider's emoji. Non-alphanumeric
  *                                        characters in the provider name become "_"
  *                                        (llama-swap → PI_TITLE_GLYPHS_EMOJI_LLAMA_SWAP)
- *   PI_TITLE_GLYPHS_CWD=1               include the project (cwd) name in the title
+ *   PI_TITLE_GLYPHS_CWD                 project (cwd) name in the title — on by default;
+ *                                        set to 0 (or off/no/false) to hide it
  *   PI_TITLE_GLYPHS_STATUS_FILE=<path>  external status badge file (see below)
  *
  * External status badge — the extension point:
@@ -83,6 +84,25 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
+  let reassertTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Pi core writes its own title ("Pi - <session> - <cwd>") at moments this
+   * extension does not see — the session bind at startup/resume, /reload, and
+   * the setSessionName refresh (auto-naming lands right after the first settle).
+   * Whichever setTitle runs last owns the tab, so after those events we re-assert
+   * once, delayed: a single 500 ms re-render makes the glyph title the survivor
+   * in every ordering. The timer is unref'd so it never holds a process open.
+   */
+  function reassertAfterClobber() {
+    if (reassertTimer) return;
+    reassertTimer = setTimeout(() => {
+      reassertTimer = undefined;
+      render();
+    }, 500);
+    reassertTimer.unref?.();
+  }
+
   function noteCtx(ctx: unknown) {
     ctxRef = ctx;
     const c = ctx as { cwd?: string } | undefined;
@@ -101,6 +121,21 @@ export default function (pi: ExtensionAPI) {
     // Keep context across hot reloads; reset on a genuinely new/resumed session.
     if (event.reason && event.reason !== "reload") lastPrompt = undefined;
     render();
+    reassertAfterClobber(); // core re-writes its title during the bind
+  });
+
+  pi.on("session_info_changed", async (_event: { name?: string }, ctx) => {
+    // Pi refreshes its "Pi - <session> - <cwd>" title on session naming — win it back.
+    noteCtx(ctx);
+    render();
+    reassertAfterClobber();
+  });
+
+  pi.on("session_shutdown", async () => {
+    if (reassertTimer) {
+      clearTimeout(reassertTimer);
+      reassertTimer = undefined;
+    }
   });
 
   pi.on("model_select", async (event: { model?: { provider?: string } }, ctx) => {

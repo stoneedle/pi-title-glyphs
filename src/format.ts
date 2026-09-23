@@ -47,10 +47,13 @@ export function emojiFor(provider: string | undefined): string {
   return FALLBACK_EMOJI;
 }
 
-/** Project (cwd) name in the title — off by default. */
+/**
+ * Project (cwd) name in the title — on by default, so multi-tab setups can tell
+ * projects apart at a glance; PI_TITLE_GLYPHS_CWD=0 (or no/off/false) hides it.
+ */
 export function showCwd(): boolean {
   const v = (process.env.PI_TITLE_GLYPHS_CWD ?? "").trim().toLowerCase();
-  return v === "1" || v === "on" || v === "true";
+  return v !== "0" && v !== "no" && v !== "off" && v !== "false";
 }
 
 export const GLYPH_WORKING = "⏳"; // actively running tools/thinking

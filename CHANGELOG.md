@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## 0.2.0 — 2026-09-23
+
+### Changed
+
+- The project (cwd) name is now shown in the title **by default** — after the state
+  glyph, before the content segment — so a row of tabs is readable at a glance.
+  `PI_TITLE_GLYPHS_CWD=0` (or `off`/`no`/`false`) restores the old no-cwd title.
+  Legacy opt-in values (`1`/`on`/`true`) are accepted unchanged.
+- The title now re-asserts itself after the moments pi core rewrites it with its own
+  `Pi - <session> - <cwd>` — the session bind at startup/resume, `/reload`, and session
+  naming (which lands right after the first settle). Previously the core title stuck
+  until the next agent event, so idle tabs appeared to run without the extension.
+
+### Added
+
+- `session_info_changed` and `session_shutdown` handlers: the former triggers the
+  re-assertion after a rename; the latter clears a pending re-assertion timer so a
+  reloaded session never renders with stale state. The timer is unref'd and one-shot.
+
+Verified on pi 0.87.1: extension loads with zero errors (SDK probe) and
+`tool_execution_start` events arrive with full args (print-mode probe run).
+
 ## 0.1.1 — 2026-09-13
 
 No code changes. Republish to force an npm search-index re-entry: 0.1.0 was

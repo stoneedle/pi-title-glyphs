@@ -1,49 +1,30 @@
 /**
- * pi-title-glyphs — live session status in your terminal/tab title.
+ * pi-title-glyphs — latest user request with a live status glyph.
  *
- * Renders a compact, always-current title so you can scan many pi tabs and
- * instantly see: which model provider each tab is talking to, whether it's
- * working / waiting on you / resting, and what it's doing (your last prompt,
- * or the most recent tool's intent while it runs).
+ * Local customization: title text changes only with a new user request.
+ * Tools, dialogs and external badges leave the request visible throughout a run.
+ * Reloading or resuming restores it from the active session branch.
  *
- *   🔸 ⏳ · Rebuilding the search index                (working — live tool intent)
- *   🦙 ❗ NEEDS YOU · confirm: Run rm -rf build?       (blocked on you)
- *   ♊ ✓ · Add a retry budget to the fetch helper      (resting — finished, idle)
+ *   ⏳ · 修复字幕导入     working
+ *   ❗ · 修复字幕导入     waiting for input
+ *   🔵 · 修复字幕导入     finished in the background, unread
+ *   ✓ · 修复字幕导入      finished and viewed
  *
- * States (driven by pi events, no heuristics):
- *   working   agent_start → tool_execution_start* → ui_prompt_end → …
- *   needs-you ui_prompt_start (confirm/select/input/editor/custom dialogs)
- *   resting   agent_settled  (pi will not continue on its own)
+ * Optional config:
+ *   PI_TITLE_GLYPHS_CWD=1              include the project directory name
+ *   PI_TITLE_GLYPHS_STATUS_FILE=<path> external status badge file
  *
- * Tool verbiage: prefers `args.displaySummary` (written by pi-tool-display-intent
- * or any extension using that field), then a per-tool fallback (bash command,
- * path, query…). Pure string truncation with "…" — no LLM calls, ever.
- *
- * Config (env vars, optional):
- *   PI_TITLE_GLYPHS_EMOJI_<PROVIDER>=🦌  override a provider's emoji. Non-alphanumeric
- *                                        characters in the provider name become "_"
- *                                        (llama-swap → PI_TITLE_GLYPHS_EMOJI_LLAMA_SWAP)
- *   PI_TITLE_GLYPHS_CWD                 project (cwd) name in the title — on by default;
- *                                        set to 0 (or off/no/false) to hide it
- *   PI_TITLE_GLYPHS_STATUS_FILE=<path>  external status badge file (see below)
- *
- * External status badge — the extension point:
- *   Any other extension can push one glyph + label into the title by writing JSON to
- *   the status file (default `<agent-dir>/extension-data/pi-title-glyphs/status-<pid>.json`):
- *
- *     { "emoji": "🔓", "label": "HOLDING", "expiresAt": 1789200000000 }
- *
- *   All fields optional. `expiresAt` is epoch milliseconds. The badge glyph sits right
- *   after the provider emoji; the label replaces the content segment when the session
- *   is not actively working. Absent, unreadable, malformed or expired ⇒ no badge, and
- *   nothing is logged. A session-queue extension, a CI watcher, or a "needs a human"
- *   signaller can all use this without this extension knowing they exist.
+ * An external writer can add a glyph with optional expiry:
+ *   { "emoji": "🔓", "expiresAt": 1789200000000 }
+ * The default file is `<agent-dir>/extension-data/pi-title-glyphs/status-<pid>.json`.
+ * Missing, unreadable, malformed or expired badges are ignored.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import * as path from "node:path";
-import { externalBadge, oneLine, renderTitle, toolText } from "./format.ts";
+import { externalBadge, oneLine, renderTitle } from "./format.ts";
+import { observeTerminalFocus } from "./focus.ts";
 
 /**
  * Where the external status badge lives — **per session**, keyed by the pi process id,
@@ -64,132 +45,115 @@ export default function (pi: ExtensionAPI) {
   type State = "working" | "needs-you" | "resting";
 
   let state: State = "resting";
-  let provider: string | undefined;
+  let unread = false;
+  let focused = true; // Interactive startup is visible; focus events take over.
+  let stopObservingFocus: (() => void) | undefined;
   let cwdName = "";
   let lastPrompt: string | undefined;
-  let toolLine: string | undefined; // most recent tool's verbiage
-  let waitInfo: { kind?: string; title?: string } | undefined;
-  let ctxRef: unknown;
+  let ctxRef: ExtensionContext | undefined;
 
   function render() {
-    try {
-      // ctx.ui.setTitle is not in the published type surface yet — call it defensively
-      // so a runtime without it degrades to "no title" instead of throwing.
-      const ctx = ctxRef as { ui?: { setTitle?: (t: string) => void } } | undefined;
-      ctx?.ui?.setTitle?.(
-        renderTitle({ state, provider, cwdName, lastPrompt, toolLine, waitInfo, badge: externalBadge(statusFile()) }),
-      );
-    } catch {
-      // title is best-effort chrome; never break a session over it
-    }
+    if (!ctxRef) return;
+    ctxRef.ui.setTitle(
+      renderTitle({ state, unread, cwdName, lastPrompt, badge: externalBadge(statusFile()) }),
+    );
   }
 
-  let reassertTimer: ReturnType<typeof setTimeout> | undefined;
-
-  /**
-   * Pi core writes its own title ("Pi - <session> - <cwd>") at moments this
-   * extension does not see — the session bind at startup/resume, /reload, and
-   * the setSessionName refresh (auto-naming lands right after the first settle).
-   * Whichever setTitle runs last owns the tab, so after those events we re-assert
-   * once, delayed: a single 500 ms re-render makes the glyph title the survivor
-   * in every ordering. The timer is unref'd so it never holds a process open.
-   */
-  function reassertAfterClobber() {
-    if (reassertTimer) return;
-    reassertTimer = setTimeout(() => {
-      reassertTimer = undefined;
-      render();
-    }, 500);
-    reassertTimer.unref?.();
-  }
-
-  function noteCtx(ctx: unknown) {
+  function noteCtx(ctx: ExtensionContext) {
     ctxRef = ctx;
-    const c = ctx as { cwd?: string } | undefined;
-    if (c?.cwd && c.cwd !== "/") {
-      cwdName = c.cwd.split("/").filter(Boolean).pop() ?? "";
+    cwdName = path.basename(ctx.cwd);
+  }
+
+  function restorePrompt(ctx: ExtensionContext) {
+    lastPrompt = undefined;
+    for (const entry of ctx.sessionManager.getBranch()) {
+      if (entry.type !== "message" || entry.message.role !== "user") continue;
+      const content = entry.message.content;
+      const text = typeof content === "string"
+        ? content
+        : content.filter((part) => part.type === "text").map((part) => part.text).join(" ");
+      const prompt = oneLine(text);
+      if (prompt) lastPrompt = prompt;
     }
   }
 
-  pi.on("session_start", async (event: { reason?: string }, ctx) => {
+  pi.on("session_start", async (_event, ctx) => {
     noteCtx(ctx);
-    const c = ctx as { model?: { provider?: string } };
-    if (c?.model?.provider) provider = c.model.provider;
     state = "resting";
-    toolLine = undefined;
-    waitInfo = undefined;
-    // Keep context across hot reloads; reset on a genuinely new/resumed session.
-    if (event.reason && event.reason !== "reload") lastPrompt = undefined;
-    render();
-    reassertAfterClobber(); // core re-writes its title during the bind
-  });
+    unread = false;
+    restorePrompt(ctx);
 
-  pi.on("session_info_changed", async (_event: { name?: string }, ctx) => {
-    // Pi refreshes its "Pi - <session> - <cwd>" title on session naming — win it back.
-    noteCtx(ctx);
+    stopObservingFocus?.();
+    stopObservingFocus = undefined;
+    if (ctx.mode === "tui" && process.stdin.isTTY) {
+      stopObservingFocus = observeTerminalFocus((visible) => {
+        focused = visible;
+        if (visible && unread) {
+          unread = false;
+          render();
+        }
+      });
+    }
     render();
-    reassertAfterClobber();
   });
 
   pi.on("session_shutdown", async () => {
-    if (reassertTimer) {
-      clearTimeout(reassertTimer);
-      reassertTimer = undefined;
-    }
+    stopObservingFocus?.();
+    stopObservingFocus = undefined;
+    ctxRef = undefined;
   });
 
-  pi.on("model_select", async (event: { model?: { provider?: string } }, ctx) => {
+  pi.on("session_tree", async (_event, ctx) => {
     noteCtx(ctx);
-    if (event.model?.provider) provider = event.model.provider;
+    restorePrompt(ctx);
     render();
   });
 
-  pi.on("input", async (event: { text?: string; source?: string }, ctx) => {
+  pi.on("model_select", async (_event, ctx) => {
+    noteCtx(ctx);
+    render();
+  });
+
+  pi.on("input", async (event, ctx) => {
     noteCtx(ctx);
     if (event.source === "extension") return; // injected messages aren't your requests
+    if (event.source === "interactive") {
+      focused = true;
+      unread = false;
+    }
     const t = event.text ? oneLine(event.text) : "";
     if (t) lastPrompt = t;
     render();
   });
 
-  pi.on("agent_start", async (_event: unknown, ctx) => {
+  pi.on("agent_start", async (_event, ctx) => {
     noteCtx(ctx);
     state = "working";
-    toolLine = undefined;
-    waitInfo = undefined;
+    unread = false;
     render();
   });
 
-  pi.on("tool_execution_start", async (event: { toolName?: string; args?: unknown }, ctx) => {
+  pi.on("tool_execution_start", async (_event, ctx) => {
     noteCtx(ctx);
-    if (state !== "working") return;
-    const t = toolText(event.toolName ?? "", event.args);
-    if (t) toolLine = t; // keep last known verbiage when a tool has no summary
     render();
   });
 
-  pi.on("ui_prompt_start", async (event: { kind?: string; title?: string }, ctx) => {
+  pi.on("ui_prompt_start", async (_event, ctx) => {
     noteCtx(ctx);
     state = "needs-you";
-    waitInfo = {
-      kind: event.kind,
-      title: event.title ? oneLine(event.title) : undefined,
-    };
     render();
   });
 
-  pi.on("ui_prompt_end", async (_event: unknown, ctx) => {
+  pi.on("ui_prompt_end", async (_event, ctx) => {
     noteCtx(ctx);
     state = "working"; // agent loop resumes; agent_settled flips to resting when truly done
-    waitInfo = undefined;
     render();
   });
 
-  pi.on("agent_settled", async (_event: unknown, ctx) => {
+  pi.on("agent_settled", async (_event, ctx) => {
     noteCtx(ctx);
     state = "resting";
-    toolLine = undefined;
-    waitInfo = undefined;
+    unread = !focused;
     render();
   });
 }

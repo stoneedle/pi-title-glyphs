@@ -1,7 +1,7 @@
 {
   "name": "pi-title-glyphs",
   "version": "0.2.0",
-  "description": "Live session status in your terminal/tab title for pi: provider glyph, working/needs-you/resting state, and what it's doing \u2014 event-driven, no LLM calls.",
+  "description": "Stable latest-request terminal titles for pi, with working, waiting, read and unread status glyphs. No LLM calls.",
   "keywords": [
     "pi-package",
     "pi",
@@ -15,13 +15,14 @@
   ],
   "license": "MIT",
   "author": "t0mj",
-  "homepage": "https://github.com/t0mj/pi-title-glyphs#readme",
+  "contributors": ["stoneedle"],
+  "homepage": "https://github.com/stoneedle/pi-title-glyphs#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/t0mj/pi-title-glyphs.git"
+    "url": "git+https://github.com/stoneedle/pi-title-glyphs.git"
   },
   "bugs": {
-    "url": "https://github.com/t0mj/pi-title-glyphs/issues"
+    "url": "https://github.com/stoneedle/pi-title-glyphs/issues"
   },
   "type": "module",
   "engines": {
@@ -33,10 +34,12 @@
     ]
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": ">=1.0.4",
+    "@earendil-works/pi-tui": ">=1.0.4"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.85.1"
+    "@earendil-works/pi-coding-agent": "1.0.4",
+    "@earendil-works/pi-tui": "1.0.4"
   },
   "files": [
     "src",
@@ -46,7 +49,7 @@
     "package.json"
   ],
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/format.test.ts",
     "prepublishOnly": "npm test"
   }
 }

@@ -1,47 +1,28 @@
 # Contributing
 
-Small, focused patches are very welcome — especially the ones listed under
-**Known gaps** in the README.
+This fork optimizes terminal-tab recognition: the latest user request stays visible, while a compact status prefix communicates working, waiting, read or unread state.
 
 ## Layout
 
-| File | What it is |
+| File | Responsibility |
 |---|---|
-| `src/format.ts` | title formatting, the provider map, the external-badge reader. Pure plus one file read; imports nothing from pi, so it is fully unit-testable |
-| `src/index.ts` | pi event wiring and the agent-directory lookup. The only file that imports `@earendil-works/pi-coding-agent` |
-| `test/format.test.ts` | `node --test`, no dependencies |
+| `src/index.ts` | Pi event wiring, session-local state and active-branch prompt restoration |
+| `src/format.ts` | Title rendering and the optional external badge contract |
+| `src/focus.ts` | Observe existing focus reports through Pi's input parser, with listener cleanup |
+| `test/format.test.ts` | Public rendering and badge result contracts |
 
-## Run it
-
-```bash
-npm test                    # unit tests, no install needed
-pi install ./.              # load your clone into pi, then /reload a session
-```
-
-## Load check
-
-Extensions load before model resolution, so this exercises a full extension load with no
-inference, no auth and no network — in a throwaway config directory:
+## Verify
 
 ```bash
-PI_CODING_AGENT_DIR=$(mktemp -d) PI_OFFLINE=1 pi -p ok --model nonexistent/x \
-  -e src/index.ts --no-skills --no-context-files --no-tools
+npm test
+npm pack --dry-run
+pi -e ./src/index.ts
 ```
 
-Pass = the only output is `Error: Model "nonexistent/x" not found.`
-Any `Failed to load extension` line is a real failure.
+In the temporary Pi session, send a request that runs tools and confirm that only the state prefix changes. Send another request and confirm that the text updates. Reload and resume the session to check prompt restoration. With terminal focus reporting enabled, finish a run in a background tab and check that `🔵` clears when the tab becomes focused.
 
-## What gets merged
+Use Pi's normal extension loader and a real session file when checking event wiring and session restoration. The renderer tests run without installing dependencies. Test data and terminal listeners must be cleaned up after verification.
 
-- Provider glyphs for providers people actually use, and better per-tool verbiage.
-- Terminal/OS fixes, with a note on what you verified.
-- Anything that keeps the no-LLM, no-network, no-tools, no-state promises.
+## Design
 
-## What won't
-
-- LLM calls, network access, or telemetry of any kind.
-- Registering tools or commands (the extension deliberately registers none, so it can
-  never fail to load over a tool-name conflict).
-- Writing files. Reading the optional badge file is the only filesystem access.
-- Anything that can throw from the event path: a title is best-effort chrome and must
-  never take a session down.
+The prompt owns the title text; tools, dialogs and badges affect only the status prefix. Keep provider selection and tool progress out of title text. Use Pi's `ctx.ui.setTitle` and existing terminal input parser. Keep the extension local and event-driven, with no LLM calls, network requests, tools, commands or persistent state.

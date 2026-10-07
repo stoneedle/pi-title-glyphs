@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased — stoneedle fork
+
+### Changed
+
+- Title text stays on the latest user request throughout tools, dialogs and completion.
+- Provider icons are omitted; the project directory name is opt-in.
+- External badges add only a glyph, keeping the request visible.
+- The fork uses Pi 1.0.4's typed title and terminal input APIs.
+
+### Added
+
+- Background-completion unread glyph, cleared by terminal focus or user input.
+- Prompt restoration from the active branch on reload, resume and tree navigation.
+- Terminal focus observation with listener cleanup on shutdown.
+
 ## 0.2.0 — 2026-09-23
 
 ### Changed

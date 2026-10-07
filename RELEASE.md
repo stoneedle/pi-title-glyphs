@@ -1,4 +1,6 @@
-# Release recipe + worksheet
+# Upstream release history
+
+These recipes and worksheets record releases by the upstream maintainer. This fork is distributed through GitHub; its installation and development workflow is documented in [README.md](README.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 The repeatable steps for this package, so a release is never re-derived.
 Method: a 10-stage, 3-gate package-publish checklist (triage, scrub, prove it

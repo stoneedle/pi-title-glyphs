@@ -4,7 +4,24 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased — stoneedle fork
+## 0.3.0 — stoneedle fork
+
+### Changed
+
+- Save one initial first-input name instead of retitling on later questions.
+- Use native saved names consistently in terminal and browser views.
+- Preserve complete Unicode graphemes in names and status badges.
+- Restore resting state when an idle dialog closes.
+
+### Added
+
+- Optional direct background model summary, including GPT-6 Luna.
+- Persistent manual rename priority and stale-result rejection using native metadata revisions.
+- Authenticated per-session loopback naming ownership shared with pi-web.
+- Exact Pi 1.0.4 host repair so extension titles survive default host updates.
+- Native persistence, host lifecycle and cross-fork HTTP integration regressions.
+
+## Earlier stoneedle fork changes
 
 ### Changed
 

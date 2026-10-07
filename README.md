@@ -1,71 +1,79 @@
 # pi-title-glyphs
 
-A fork of [t0mj/pi-title-glyphs](https://github.com/t0mj/pi-title-glyphs) that keeps each terminal tab identifiable by your **latest request**. The request stays visible while tools run, dialogs open and the agent finishes. Only a new user request changes the title text.
+This [t0mj/pi-title-glyphs](https://github.com/t0mj/pi-title-glyphs) fork gives a Pi session a stable name from its **first non-empty user input**, then displays that name with live terminal status.
 
 ```text
 ⏳ · Fix subtitle import     working
-❗ · Fix subtitle import     waiting for your input
+❗ · Fix subtitle import     waiting for input
 🔵 · Fix subtitle import     finished in the background, unread
 ✓ · Fix subtitle import      finished and viewed
 ```
 
-The status glyph changes independently of the request. Provider icons are omitted to leave more room for the task. Titles are derived locally from input and Pi events, with no LLM calls or network requests.
+Later questions, tools and dialogs leave the name unchanged. Manual `/name` or browser renaming is persistent and takes precedence over an unfinished automatic summary. Existing named sessions keep their names on reload and resume.
 
 ## Install
 
-Requires Node.js 22.19.0 or newer and Pi 1.0.4 or newer.
+Requires Node.js 22.19+ and Pi 1.0.4.
 
 ```bash
 pi install git:github.com/stoneedle/pi-title-glyphs
 ```
 
-Then restart Pi or run `/reload`. Keep one title extension installed: move any standalone copy at `~/.pi/agent/extensions/pi-title-glyphs/` out of the extension directory before installing this package.
+Keep one installed copy. For development, install this checkout with `pi install .`.
 
-For development, load a checkout instead:
+Pi 1.0.4 needs its native title owner repaired so default host updates preserve the extension's status prefix. From this checkout, run:
 
 ```bash
-git clone https://github.com/stoneedle/pi-title-glyphs.git
-cd pi-title-glyphs
-pi install .
+node scripts/patch-pi-title.mjs "$(npm root -g)/@earendil-works/pi-coding-agent"
 ```
 
-## Title behavior
+The script accepts only Pi 1.0.4 and fails if its source differs from the supported seam. Restart Pi after applying it. Reinstalling the host replaces this repair; apply it again for that host installation. Ordinary extension changes can use `/reload`.
 
-| Glyph | State | Event |
-|---|---|---|
-| `⏳` | Working | `agent_start`, `ui_prompt_end` |
-| `❗` | Waiting for input | `ui_prompt_start` |
-| `🔵` | Finished while unfocused | `agent_settled` |
-| `✓` | Finished and viewed | `agent_settled` while focused; focus-in or user input clears unread |
+## Naming
 
-Interactive and RPC user input update the request. Extension-injected input leaves it unchanged. Reloading, resuming or navigating the session tree restores the latest non-empty user text from the active branch. Long requests are truncated within `TITLE_BUDGET` in [`src/format.ts`](src/format.ts), with the same text budget for each status glyph.
+[`src/session-title.ts`](src/session-title.ts) saves the initial opening-text excerpt with Pi's native `setSessionName`. By default this is the final automatic name. To request one background model summary, create `<agent-dir>/extension-data/pi-title-glyphs/config.json`:
 
-Unread tracking observes Pi's existing terminal focus reports without consuming input, changing raw mode or emitting terminal escapes. It works when the terminal and Pi mode provide focus reports; typing also acknowledges completion. Terminal title rendering uses Pi's `ctx.ui.setTitle`. RPC and print modes provide no terminal title surface.
+```json
+{ "model": "openai-codex/gpt-6-luna" }
+```
 
-## Configuration
+An empty object disables model summarization. Configuration takes effect on session load. The selected model uses Pi's existing model registry and authentication; the main task proceeds while the summary is generated. Only the opening-task excerpt is sent. Failed requests report an error and preserve the initial name.
 
-| Variable | Default | Effect |
-|---|---|---|
-| `PI_TITLE_GLYPHS_CWD` | off | `1` / `on` / `true` adds the project directory name |
-| `PI_TITLE_GLYPHS_STATUS_FILE` | `<agent-dir>/extension-data/pi-title-glyphs/status-<pid>.json` | Optional external badge file |
+The latest native `session_info` revision decides whether a result can commit. Manual renaming, including renaming to the same text, invalidates a pending result. On reopen, an existing saved name completes automatic naming for that session.
 
-An external writer can add a status glyph before the normal state indicator:
+## pi-web integration
+
+Use [stoneedle/pi-web](https://github.com/stoneedle/pi-web). The title plugin owns automatic naming in terminal and RPC sessions; pi-web reads the native saved name and supplies the manual rename UI.
+
+[`src/owner.ts`](src/owner.ts) publishes one authenticated loopback owner per active session. Its private registration is `<agent-dir>/extension-data/pi-title-glyphs/owners/<session-file-name>.json`. Other Pi views and pi-web route active renames to that instance. Inactive web renames append native `session_info` entries with IDs and parent links. A live-owner failure is reported, leaving the saved name intact.
+
+## Display
+
+Status follows agent activity, actual dialog completion state and terminal focus. Focus-in or interactive input acknowledges unread completion. RPC and print sessions participate in naming; TUI sessions render titles through `ctx.ui.setTitle`. Grapheme-aware truncation preserves emoji, flags and combining characters.
+
+| Variable | Effect |
+|---|---|
+| `PI_TITLE_GLYPHS_CWD=1` | Include the project directory name |
+| `PI_TITLE_GLYPHS_STATUS_FILE` | External badge file; default `<agent-dir>/extension-data/pi-title-glyphs/status-<pid>.json` |
+
+External badges add a glyph to the prefix:
 
 ```json
 { "emoji": "🔓", "expiresAt": 1789200000000 }
 ```
 
-`emoji` is required, flattened to one line and capped at eight JavaScript string units. `expiresAt` is optional, in epoch milliseconds. Missing, unreadable, malformed or expired badges are ignored. The file is read at title-rendering events; this extension creates no files or watchers. A badge changes the prefix while the request remains the title text.
+Glyphs are capped at eight graphemes. `expiresAt` is optional epoch milliseconds; malformed, unavailable or expired badges are ignored.
 
-## Development
+## Verify
 
 ```bash
+npm install --ignore-scripts
 npm test
 npm pack --dry-run
 ```
 
-[`src/index.ts`](src/index.ts) owns event-driven state and prompt restoration. [`src/format.ts`](src/format.ts) owns rendering and badge parsing. [`src/focus.ts`](src/focus.ts) observes focus reports through Pi's input parser and releases its listener on shutdown. See [CONTRIBUTING.md](CONTRIBUTING.md) for loading and verification.
+The tests use real Pi persistence, the native extension loader, actual owner HTTP requests and host title methods. See [CONTRIBUTING.md](CONTRIBUTING.md) for the shared pi-web integration entrance.
 
 ## License
 
-MIT. Original extension by t0mj; fork customizations by stoneedle. See [LICENSE](LICENSE).
+MIT. Original extension by t0mj; fork customizations by stoneedle.

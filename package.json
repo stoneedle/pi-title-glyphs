@@ -1,7 +1,7 @@
 {
   "name": "pi-title-glyphs",
-  "version": "0.2.0",
-  "description": "Stable latest-request terminal titles for pi, with working, waiting, read and unread status glyphs. No LLM calls.",
+  "version": "0.3.0",
+  "description": "First-input session names, optional background model summaries, persistent manual renaming and live terminal status for pi.",
   "keywords": [
     "pi-package",
     "pi",
@@ -43,13 +43,14 @@
   },
   "files": [
     "src",
+    "scripts/patch-pi-title.mjs",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
     "package.json"
   ],
   "scripts": {
-    "test": "node --test test/format.test.ts",
+    "test": "node --test test/format.test.ts test/session-title.test.ts test/extension.test.ts test/host-title.test.mjs",
     "prepublishOnly": "npm test"
   }
 }

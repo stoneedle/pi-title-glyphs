@@ -1,28 +1,37 @@
 # Contributing
 
-This fork optimizes terminal-tab recognition: the latest user request stays visible, while a compact status prefix communicates working, waiting, read or unread state.
+The saved Pi session name gives terminal and browser views one identity. Status is a separate display concern.
 
-## Layout
-
-| File | Responsibility |
+| Owner | Responsibility |
 |---|---|
-| `src/index.ts` | Pi event wiring, session-local state and active-branch prompt restoration |
-| `src/format.ts` | Title rendering and the optional external badge contract |
-| `src/focus.ts` | Observe existing focus reports through Pi's input parser, with listener cleanup |
-| `test/format.test.ts` | Public rendering and badge result contracts |
+| `src/session-title.ts` | Initial name, optional model request, persisted revision eligibility |
+| `src/owner.ts` | Active naming ownership and authenticated loopback transport |
+| `src/index.ts` | Session lifecycle, name observation and status events |
+| `src/format.ts` | Grapheme-safe title and badge rendering |
+| `src/focus.ts` | Observe Pi's existing focus reports and release listeners |
+| `scripts/patch-pi-title.mjs` | Pi 1.0.4 host title override and reset seam |
 
-## Verify
+## Verification
 
 ```bash
+npm install --ignore-scripts
 npm test
 npm pack --dry-run
-pi -e ./src/index.ts
 ```
 
-In the temporary Pi session, send a request that runs tools and confirm that only the state prefix changes. Send another request and confirm that the text updates. Reload and resume the session to check prompt restoration. With terminal focus reporting enabled, finish a run in a background tab and check that `🔵` clears when the tab becomes focused.
+Tests use isolated native session files. Controlled model completions verify late-result rejection without making subscription requests. The host test repairs only the development dependency and captures actual native title writes.
 
-Use Pi's normal extension loader and a real session file when checking event wiring and session restoration. The renderer tests run without installing dependencies. Test data and terminal listeners must be cleaned up after verification.
+The companion web fork provides a cross-repository E2E entrance:
+
+```bash
+# In the pi-web checkout, with this checkout's dependencies installed:
+PI_TITLE_GLYPHS_ROOT=/path/to/pi-title-glyphs make title-e2e
+```
+
+It sends a real web HTTP rename to a real title owner, releases a late model response, closes the owner, renames offline, and reopens through Pi. Final saved names must agree across both views. `test/owner-fixture.mjs` owns that isolated actor's lifetime.
+
+For a live terminal check, load the extension, submit an opening request, and then a short follow-up. The same name should survive tools and dialogs. Rename while a summary is pending and resume the saved session. With terminal focus reporting, verify that background completion's `🔵` clears on focus.
 
 ## Design
 
-The prompt owns the title text; tools, dialogs and badges affect only the status prefix. Keep provider selection and tool progress out of title text. Use Pi's `ctx.ui.setTitle` and existing terminal input parser. Keep the extension local and event-driven, with no LLM calls, network requests, tools, commands or persistent state.
+Automatic naming has one owner. Pi owns persistence; the web consumes the same native name. Model requests are direct, optional and background-only. Commit eligibility is checked against persisted metadata, including updates from another Pi view. Live-owner errors propagate so failed transport cannot create a competing file writer.
